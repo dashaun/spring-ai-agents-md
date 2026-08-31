@@ -1,0 +1,26 @@
+name: Question
+description: Ask a question specifically about this project
+title: "[Question] "
+labels:
+  - "type: question"
+body:
+  - type: markdown
+    attributes:
+      value: For general Spring AI support, use the resources linked from the Spring AI Community organization.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Describe what you are trying to accomplish and where you are stuck.
+    validations:
+      required: true
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What have you tried?
+      description: Include relevant configuration or a small code example.
+  - type: input
+    id: version
+    attributes:
+      label: Project version
+      placeholder: 0.0.1-SNAPSHOT

@@ -1,0 +1,31 @@
+{
+  "name": "Ollama chat containing AGENTS.md instructions",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/chat",
+    "bodyPatterns": [
+      { "contains": "AGENTS.md active" },
+      { "contains": "\"role\":\"system\"" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "model": "mock-agent",
+      "created_at": "2026-01-01T00:00:00Z",
+      "message": {
+        "role": "assistant",
+        "content": "AGENTS.md active: deterministic response"
+      },
+      "done": true,
+      "done_reason": "stop",
+      "total_duration": 1,
+      "load_duration": 1,
+      "prompt_eval_count": 1,
+      "prompt_eval_duration": 1,
+      "eval_count": 1,
+      "eval_duration": 1
+    }
+  }
+}

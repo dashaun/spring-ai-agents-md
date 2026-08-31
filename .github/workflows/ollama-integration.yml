@@ -1,0 +1,30 @@
+name: Ollama Integration
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 8 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ollama-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ollama-integration:
+    name: Ollama integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e3057392dc68eaed1f03
+      - name: Set up Java 17
+        uses: actions/setup-java@7a445ee88d4e23b52c33c4d2dbe6604d66f37930
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Run Ollama integration test
+        run: ./mvnw --batch-mode --no-transfer-progress -pl examples/spring-ai-agents-md-example -am verify -Pollama-integration

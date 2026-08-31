@@ -1,0 +1,3 @@
+# Test instructions
+
+SENSITIVE_INSTRUCTION_MUST_NOT_BE_LOGGED

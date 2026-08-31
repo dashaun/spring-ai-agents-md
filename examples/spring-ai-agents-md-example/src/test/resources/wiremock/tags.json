@@ -1,0 +1,22 @@
+{
+  "name": "Ollama tags",
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/tags"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "models": [
+        {
+          "name": "mock-agent:latest",
+          "model": "mock-agent:latest",
+          "modified_at": "2026-01-01T00:00:00Z",
+          "size": 1,
+          "digest": "sha256:mock"
+        }
+      ]
+    }
+  }
+}

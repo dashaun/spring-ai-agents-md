@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Spring AI Community
+    url: https://github.com/spring-ai-community
+    about: Find community resources for general Spring AI questions.
+  - name: Report a security vulnerability
+    url: https://github.com/dashaun/spring-ai-agents-md/security/advisories/new
+    about: Privately report a suspected security vulnerability.

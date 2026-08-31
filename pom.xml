@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>4.1.1</version>
+		<relativePath />
+	</parent>
+
+	<groupId>io.github.spring-ai-community</groupId>
+	<artifactId>spring-ai-agents-md-parent</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>pom</packaging>
+
+	<name>Spring AI AGENTS.md Parent</name>
+	<description>Parent build for Spring AI AGENTS.md modules</description>
+	<url>https://github.com/dashaun/spring-ai-agents-md</url>
+
+	<organization>
+		<name>Spring AI Community</name>
+		<url>https://github.com/spring-ai-community</url>
+	</organization>
+
+	<licenses>
+		<license>
+			<name>Apache License, Version 2.0</name>
+			<url>https://www.apache.org/licenses/LICENSE-2.0</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<scm>
+		<url>https://github.com/dashaun/spring-ai-agents-md</url>
+		<connection>scm:git:https://github.com/dashaun/spring-ai-agents-md.git</connection>
+		<developerConnection>scm:git:ssh://git@github.com/dashaun/spring-ai-agents-md.git</developerConnection>
+	</scm>
+
+	<issueManagement>
+		<system>GitHub Issues</system>
+		<url>https://github.com/dashaun/spring-ai-agents-md/issues</url>
+	</issueManagement>
+
+	<ciManagement>
+		<system>GitHub Actions</system>
+		<url>https://github.com/dashaun/spring-ai-agents-md/actions</url>
+	</ciManagement>
+
+	<modules>
+		<module>spring-ai-autoconfigure-agents-md</module>
+		<module>spring-ai-starter-agents-md</module>
+		<module>examples</module>
+	</modules>
+
+	<properties>
+		<java.version>17</java.version>
+		<spring-ai.version>2.0.1</spring-ai.version>
+		<jacoco.version>0.8.15</jacoco.version>
+		<spring-javaformat.version>0.0.47</spring-javaformat.version>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.ai</groupId>
+				<artifactId>spring-ai-bom</artifactId>
+				<version>${spring-ai.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>io.spring.javaformat</groupId>
+				<artifactId>spring-javaformat-maven-plugin</artifactId>
+				<version>${spring-javaformat.version}</version>
+				<executions>
+					<execution>
+						<id>validate-spring-format</id>
+						<phase>validate</phase>
+						<goals>
+							<goal>validate</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+</project>

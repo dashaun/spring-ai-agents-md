@@ -303,7 +303,8 @@ Use the Maven Wrapper from the repository root:
 ```text
 spring-ai-agents-md/
 ├── examples/
-│   └── spring-ai-agents-md-example/    # Runnable Ollama application
+│   ├── spring-ai-agents-md-example/          # Runnable Ollama web application
+│   └── spring-ai-agents-md-coding-agent/     # Spring Shell repository steward
 ├── spring-ai-autoconfigure-agents-md/  # Auto-configuration, public API, and tests
 ├── spring-ai-starter-agents-md/        # Dependency-only starter for applications
 └── pom.xml                             # Parent and reactor build
@@ -321,7 +322,13 @@ Spring Java Format validation runs during Maven's `validate` phase.
 JaCoCo runs during `verify` and requires at least 85% line coverage independently for the
 parser and advisor packages.
 
-## Example Application
+## Example Applications
+
+The [repository steward](examples/spring-ai-agents-md-coding-agent) is the Phase 2
+foundation for an AGENTS.md-aware coding agent built with Spring AI and Spring Shell
+4.0.3. It explicitly includes Spring Shell's JLine module for the richer interactive
+experience. Bounded filesystem tools let the agent inspect a repository and create
+reviewable change proposals; only explicit shell commands can apply or discard them.
 
 The [Ollama example](examples/spring-ai-agents-md-example) is a real Spring Boot
 application that depends on the starter through its public API. It demonstrates advisor

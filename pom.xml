@@ -58,6 +58,7 @@
 	<properties>
 		<java.version>17</java.version>
 		<spring-ai.version>2.0.1</spring-ai.version>
+		<spring-shell.version>4.0.3</spring-shell.version>
 		<jacoco.version>0.8.15</jacoco.version>
 		<spring-javaformat.version>0.0.47</spring-javaformat.version>
 	</properties>

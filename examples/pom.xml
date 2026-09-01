@@ -18,6 +18,7 @@
 
 	<modules>
 		<module>spring-ai-agents-md-example</module>
+		<module>spring-ai-agents-md-coding-agent</module>
 	</modules>
 
 	<properties>

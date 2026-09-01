@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>io.github.spring-ai-community</groupId>
+		<artifactId>spring-ai-agents-md-examples</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+		<relativePath>../pom.xml</relativePath>
+	</parent>
+
+	<artifactId>spring-ai-agents-md-coding-agent</artifactId>
+	<name>Spring AI AGENTS.md Coding Agent</name>
+	<description>AGENTS.md-aware repository steward built with Spring AI and Spring Shell</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>io.github.spring-ai-community</groupId>
+			<artifactId>spring-ai-starter-agents-md</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-ollama</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.shell</groupId>
+			<artifactId>spring-shell-starter</artifactId>
+			<version>${spring-shell.version}</version>
+		</dependency>
+		<!-- Spring Shell 4 no longer includes the interactive JLine implementation. -->
+		<dependency>
+			<groupId>org.springframework.shell</groupId>
+			<artifactId>spring-shell-jline</artifactId>
+			<version>${spring-shell.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<!-- Keep demo paths and AGENTS.md discovery rooted at the repository. -->
+					<workingDirectory>${project.basedir}/../..</workingDirectory>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

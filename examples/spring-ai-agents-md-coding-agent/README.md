@@ -5,8 +5,8 @@ Shell 4.0.3, and the Spring AI AGENTS.md starter. It explores a repository, foll
 AGENTS.md instructions applicable to each file, and proposes reviewable changes. A model
 cannot apply its own proposal: a person must run `apply-change` explicitly.
 
-> **Video walkthrough:** Coming soon. Replace this sentence with a link to the YouTube
-> video after it is published.
+> **Video walkthrough:** [Build a Safe Coding Agent with Spring AI +
+> AGENTS.md](https://youtu.be/bIlYmp_iiBM)
 
 ## What the demo proves
 

@@ -19,9 +19,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e3057392dc68eaed1f03
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Java 17
-        uses: actions/setup-java@7a445ee88d4e23b52c33c4d2dbe6604d66f37930
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: "17"

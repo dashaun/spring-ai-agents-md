@@ -10,39 +10,39 @@ import org.springframework.util.Assert;
 /**
  * Reads standard Markdown into an {@link AgentsMdDocument} without imposing a schema.
  */
-public class AgentsMdParser {
+public class AgentsMdReader {
 
 	/**
-	 * Parse an {@code AGENTS.md} resource as UTF-8.
+	 * Read an {@code AGENTS.md} resource as UTF-8.
 	 * @param resource source resource
 	 * @return parsed document
 	 * @throws IOException when the resource cannot be read
 	 */
-	public AgentsMdDocument parse(Resource resource) throws IOException {
+	public AgentsMdDocument read(Resource resource) throws IOException {
 		Assert.notNull(resource, "Resource must not be null");
 		try (InputStream inputStream = resource.getInputStream()) {
-			return parse(inputStream);
+			return read(inputStream);
 		}
 	}
 
 	/**
-	 * Parse an {@code AGENTS.md} input stream as UTF-8. The caller retains ownership of
+	 * Read an {@code AGENTS.md} input stream as UTF-8. The caller retains ownership of
 	 * the stream.
 	 * @param inputStream source stream
 	 * @return parsed document
 	 * @throws IOException when the stream cannot be read
 	 */
-	public AgentsMdDocument parse(InputStream inputStream) throws IOException {
+	public AgentsMdDocument read(InputStream inputStream) throws IOException {
 		Assert.notNull(inputStream, "InputStream must not be null");
-		return parse(new String(inputStream.readAllBytes(), StandardCharsets.UTF_8));
+		return read(new String(inputStream.readAllBytes(), StandardCharsets.UTF_8));
 	}
 
 	/**
-	 * Parse {@code AGENTS.md} Markdown content.
+	 * Read {@code AGENTS.md} Markdown content.
 	 * @param content Markdown content
 	 * @return parsed document
 	 */
-	public AgentsMdDocument parse(String content) {
+	public AgentsMdDocument read(String content) {
 		Assert.notNull(content, "Content must not be null");
 		return new AgentsMdDocument(content);
 	}

@@ -3,6 +3,7 @@ package org.springframework.ai.autoconfigure.agents.advisor;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.Observation;
@@ -30,6 +31,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import reactor.core.publisher.Flux;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -46,7 +48,7 @@ class AgentsMdSystemAdvisorTests {
 
 				Run `./mvnw clean test`.
 				""";
-		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(new AgentsMdDocument(markdown));
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.of(new AgentsMdDocument(markdown));
 		ChatClientRequest request = new ChatClientRequest(
 				new Prompt(List.of(new SystemMessage("Existing instructions"), new UserMessage("Hello"))), Map.of());
 		CallAdvisorChain chain = mock(CallAdvisorChain.class);
@@ -58,7 +60,7 @@ class AgentsMdSystemAdvisorTests {
 		var requestCaptor = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
 		verify(chain).nextCall(requestCaptor.capture());
 		assertThat(requestCaptor.getValue().prompt().getSystemMessage().getText())
-			.startsWith("Existing instructions\n\n# AGENTS.md instructions")
+			.startsWith("Existing instructions\n\n<!-- spring-ai-agents-md:start -->\n# AGENTS.md instructions")
 			.contains("follow the explicit user instruction", markdown);
 		assertThat(advisor.getOrder()).isEqualTo(ToolCallingAdvisor.DEFAULT_ORDER + 10);
 		assertThat(advisor.getName()).isEqualTo("AgentsMdSystemAdvisor");
@@ -67,7 +69,7 @@ class AgentsMdSystemAdvisorTests {
 	@Test
 	void createsSystemMessageFromTheCompleteDocument() {
 		String markdown = "# Instructions\n\nUse any headings that fit the project.";
-		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(new AgentsMdDocument(markdown));
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.of(new AgentsMdDocument(markdown));
 		ChatClientRequest request = new ChatClientRequest(new Prompt(new UserMessage("Hello")), Map.of());
 		CallAdvisorChain chain = mock(CallAdvisorChain.class);
 		when(chain.nextCall(any())).thenReturn(response());
@@ -77,14 +79,14 @@ class AgentsMdSystemAdvisorTests {
 		var requestCaptor = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
 		verify(chain).nextCall(requestCaptor.capture());
 		assertThat(requestCaptor.getValue().prompt().getSystemMessage().getText())
-			.startsWith("# AGENTS.md instructions")
+			.startsWith("<!-- spring-ai-agents-md:start -->\n# AGENTS.md instructions")
 			.contains("follow the explicit user instruction", markdown);
 	}
 
 	@Test
 	void appendsTheCompleteDocumentToStreamingRequests() {
 		String markdown = "# Streaming instructions";
-		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(new AgentsMdDocument(markdown));
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.of(new AgentsMdDocument(markdown));
 		ChatClientRequest request = new ChatClientRequest(new Prompt(new UserMessage("Hello")), Map.of());
 		StreamAdvisorChain chain = mock(StreamAdvisorChain.class);
 		when(chain.nextStream(any())).thenReturn(Flux.just(response()));
@@ -94,7 +96,7 @@ class AgentsMdSystemAdvisorTests {
 		var requestCaptor = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
 		verify(chain).nextStream(requestCaptor.capture());
 		assertThat(requestCaptor.getValue().prompt().getSystemMessage().getText())
-			.startsWith("# AGENTS.md instructions")
+			.startsWith("<!-- spring-ai-agents-md:start -->\n# AGENTS.md instructions")
 			.contains(markdown);
 	}
 
@@ -104,8 +106,11 @@ class AgentsMdSystemAdvisorTests {
 		AgentsMdResolver resolver = mock(AgentsMdResolver.class);
 		when(resolver.resolve(target)).thenReturn(new AgentsMdResolution(target,
 				List.of(new AgentsMdResource("module/AGENTS.md", new AgentsMdDocument("# Module instructions")))));
-		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(resolver,
-				new DefaultAgentsMdTargetPathResolver(Path.of("workspace")), ObservationRegistry.NOOP);
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.builder()
+			.resolver(resolver)
+			.targetPathResolver(new DefaultAgentsMdTargetPathResolver(Path.of("workspace")))
+			.observationRegistry(ObservationRegistry.NOOP)
+			.build();
 		ChatClientRequest request = new ChatClientRequest(new Prompt(new UserMessage("Hello")),
 				Map.of(AgentsMdAdvisorParams.TARGET_PATH, target));
 		CallAdvisorChain chain = mock(CallAdvisorChain.class);
@@ -126,8 +131,11 @@ class AgentsMdSystemAdvisorTests {
 		Path secondTarget = Path.of("second/Example.java");
 		AgentsMdResolver resolver = target -> new AgentsMdResolution(target,
 				List.of(new AgentsMdResource(target.toString(), new AgentsMdDocument("# " + target.getName(0)))));
-		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(resolver,
-				new DefaultAgentsMdTargetPathResolver(Path.of("workspace")), ObservationRegistry.NOOP);
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.builder()
+			.resolver(resolver)
+			.targetPathResolver(new DefaultAgentsMdTargetPathResolver(Path.of("workspace")))
+			.observationRegistry(ObservationRegistry.NOOP)
+			.build();
 		AgentsMdActivePath activePath = new AgentsMdActivePath();
 		activePath.update(firstTarget);
 		ChatClientRequest request = new ChatClientRequest(new Prompt(new UserMessage("Hello")),
@@ -146,8 +154,84 @@ class AgentsMdSystemAdvisorTests {
 
 		var secondRequest = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
 		verify(secondChain).nextCall(secondRequest.capture());
-		assertThat(secondRequest.getValue().prompt().getSystemMessage().getText()).endsWith("# second")
+		assertThat(secondRequest.getValue().prompt().getSystemMessage().getText())
+			.endsWith("<!-- spring-ai-agents-md:end -->")
+			.contains("# second")
 			.doesNotContain("# first");
+	}
+
+	@Test
+	void replacesPreviouslyInjectedInstructionsEvenWhenAnotherAdvisorAppendsText() {
+		Path firstTarget = Path.of("first/Example.java");
+		Path secondTarget = Path.of("second/Example.java");
+		AgentsMdResolver resolver = target -> new AgentsMdResolution(target,
+				List.of(new AgentsMdResource(target.toString(), new AgentsMdDocument("# " + target.getName(0)))));
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.builder()
+			.resolver(resolver)
+			.targetPathResolver(new DefaultAgentsMdTargetPathResolver(Path.of("workspace")))
+			.observationRegistry(ObservationRegistry.NOOP)
+			.build();
+		AgentsMdActivePath activePath = new AgentsMdActivePath();
+		activePath.update(firstTarget);
+		ChatClientRequest request = new ChatClientRequest(new Prompt(new UserMessage("Hello")),
+				Map.of(AgentsMdAdvisorParams.ACTIVE_PATH, activePath));
+		CallAdvisorChain firstChain = mock(CallAdvisorChain.class);
+		when(firstChain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(request, firstChain);
+		var firstRequest = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
+		verify(firstChain).nextCall(firstRequest.capture());
+		Prompt appendedPrompt = firstRequest.getValue()
+			.prompt()
+			.augmentSystemMessage(systemMessage -> systemMessage.mutate()
+				.text(systemMessage.getText() + "\n\nAppended by another advisor")
+				.build());
+		ChatClientRequest appended = firstRequest.getValue().mutate().prompt(appendedPrompt).build();
+		activePath.update(secondTarget);
+		CallAdvisorChain secondChain = mock(CallAdvisorChain.class);
+		when(secondChain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(appended, secondChain);
+
+		var secondRequest = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
+		verify(secondChain).nextCall(secondRequest.capture());
+		assertThat(secondRequest.getValue().prompt().getSystemMessage().getText())
+			.contains("# second", "Appended by another advisor")
+			.doesNotContain("# first");
+	}
+
+	@Test
+	void removesPreviouslyInjectedMarkersWhenNoDocumentsApply() {
+		AtomicBoolean hasDocument = new AtomicBoolean(true);
+		AgentsMdResolver resolver = target -> hasDocument.get()
+				? new AgentsMdResolution(target,
+						List.of(new AgentsMdResource("AGENTS.md", new AgentsMdDocument("# Root"))))
+				: new AgentsMdResolution(target, List.of());
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.builder()
+			.resolver(resolver)
+			.targetPathResolver(new DefaultAgentsMdTargetPathResolver(Path.of("workspace")))
+			.observationRegistry(ObservationRegistry.NOOP)
+			.build();
+		ChatClientRequest request = new ChatClientRequest(new Prompt(new UserMessage("Hello")), Map.of());
+		CallAdvisorChain firstChain = mock(CallAdvisorChain.class);
+		when(firstChain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(request, firstChain);
+		var firstRequest = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
+		verify(firstChain).nextCall(firstRequest.capture());
+		assertThat(firstRequest.getValue().prompt().getSystemMessage().getText())
+			.contains("<!-- spring-ai-agents-md:start -->");
+		hasDocument.set(false);
+		CallAdvisorChain secondChain = mock(CallAdvisorChain.class);
+		when(secondChain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(firstRequest.getValue(), secondChain);
+
+		var secondRequest = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
+		verify(secondChain).nextCall(secondRequest.capture());
+		assertThat(secondRequest.getValue().prompt().getSystemMessage().getText())
+			.doesNotContain("<!-- spring-ai-agents-md:start -->")
+			.doesNotContain("<!-- spring-ai-agents-md:end -->");
 	}
 
 	@Test
@@ -181,9 +265,12 @@ class AgentsMdSystemAdvisorTests {
 				: new AgentsMdResolution(target,
 						List.of(new AgentsMdResource("AGENTS.md", new AgentsMdDocument("# Root")),
 								new AgentsMdResource("module/AGENTS.md", new AgentsMdDocument("# Module"))));
-		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(resolver,
-				request -> (Path) request.context().get(AgentsMdAdvisorParams.TARGET_PATH), observationRegistry,
-				meterRegistry);
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.builder()
+			.resolver(resolver)
+			.targetPathResolver(request -> (Path) request.context().get(AgentsMdAdvisorParams.TARGET_PATH))
+			.observationRegistry(observationRegistry)
+			.meterRegistry(meterRegistry)
+			.build();
 		CallAdvisorChain chain = mock(CallAdvisorChain.class);
 		when(chain.nextCall(any())).thenReturn(response());
 
@@ -203,8 +290,12 @@ class AgentsMdSystemAdvisorTests {
 				List.of(new AgentsMdResource("AGENTS.md", new AgentsMdDocument("# Root"))),
 				AgentsMdResolutionOutcome.SIZE_LIMIT, 256 * 1024);
 		ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
-		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(resolver, request -> target, ObservationRegistry.NOOP,
-				null, publisher);
+		AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.builder()
+			.resolver(resolver)
+			.targetPathResolver(request -> target)
+			.observationRegistry(ObservationRegistry.NOOP)
+			.eventPublisher(publisher)
+			.build();
 		CallAdvisorChain chain = mock(CallAdvisorChain.class);
 		when(chain.nextCall(any())).thenReturn(response());
 
@@ -220,6 +311,97 @@ class AgentsMdSystemAdvisorTests {
 			.toSystemPromptContext()
 			.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
 		assertThat(event.getValue().configuredLimit()).isEqualTo(256 * 1024);
+	}
+
+	@Test
+	void builderRequiresAResolver() {
+		assertThatThrownBy(
+				() -> AgentsMdSystemAdvisor.builder().targetPathResolver(request -> Path.of("target")).build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("AgentsMdResolver must not be null");
+	}
+
+	@Test
+	void builderRequiresATargetPathResolver() {
+		assertThatThrownBy(() -> AgentsMdSystemAdvisor.builder()
+			.resolver(target -> new AgentsMdResolution(target, List.of()))
+			.build()).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("AgentsMdTargetPathResolver must not be null");
+	}
+
+	@Test
+	void deprecatedDocumentConstructorStillInjectsTheDocument() {
+		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(new AgentsMdDocument("# Legacy"));
+		CallAdvisorChain chain = mock(CallAdvisorChain.class);
+		when(chain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(request(Map.of()), chain);
+
+		var requestCaptor = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
+		verify(chain).nextCall(requestCaptor.capture());
+		assertThat(requestCaptor.getValue().prompt().getSystemMessage().getText()).contains("# Legacy");
+	}
+
+	@Test
+	void deprecatedDocumentAndRegistryConstructorStillInjectsTheDocument() {
+		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(new AgentsMdDocument("# Legacy"),
+				ObservationRegistry.NOOP);
+		CallAdvisorChain chain = mock(CallAdvisorChain.class);
+		when(chain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(request(Map.of()), chain);
+
+		var requestCaptor = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
+		verify(chain).nextCall(requestCaptor.capture());
+		assertThat(requestCaptor.getValue().prompt().getSystemMessage().getText()).contains("# Legacy");
+	}
+
+	@Test
+	void deprecatedResolverConstructorStillResolves() {
+		AgentsMdResolver resolver = target -> new AgentsMdResolution(target,
+				List.of(new AgentsMdResource("AGENTS.md", new AgentsMdDocument("# Legacy"))));
+		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(resolver,
+				new DefaultAgentsMdTargetPathResolver(Path.of("workspace")), ObservationRegistry.NOOP);
+		CallAdvisorChain chain = mock(CallAdvisorChain.class);
+		when(chain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(request(Map.of()), chain);
+
+		var requestCaptor = org.mockito.ArgumentCaptor.forClass(ChatClientRequest.class);
+		verify(chain).nextCall(requestCaptor.capture());
+		assertThat(requestCaptor.getValue().prompt().getSystemMessage().getText()).contains("# Legacy");
+	}
+
+	@Test
+	void deprecatedResolverAndMeterConstructorStillResolves() {
+		SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+		AgentsMdResolver resolver = target -> new AgentsMdResolution(target,
+				List.of(new AgentsMdResource("AGENTS.md", new AgentsMdDocument("# Legacy"))));
+		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(resolver,
+				new DefaultAgentsMdTargetPathResolver(Path.of("workspace")), ObservationRegistry.NOOP, meterRegistry);
+		CallAdvisorChain chain = mock(CallAdvisorChain.class);
+		when(chain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(request(Map.of()), chain);
+
+		assertThat(meterRegistry.get(AgentsMdObservations.CONTEXT_SIZE).summary().count()).isEqualTo(1);
+	}
+
+	@Test
+	void deprecatedFullConstructorStillResolvesAndPublishesEvents() {
+		Path target = Path.of("module/Example.java");
+		AgentsMdResolver resolver = ignored -> new AgentsMdResolution(target,
+				List.of(new AgentsMdResource("AGENTS.md", new AgentsMdDocument("# Legacy"))),
+				AgentsMdResolutionOutcome.SIZE_LIMIT, 256 * 1024);
+		ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
+		AgentsMdSystemAdvisor advisor = new AgentsMdSystemAdvisor(resolver, request -> target, ObservationRegistry.NOOP,
+				null, publisher);
+		CallAdvisorChain chain = mock(CallAdvisorChain.class);
+		when(chain.nextCall(any())).thenReturn(response());
+
+		advisor.adviseCall(request(Map.of()), chain);
+
+		verify(publisher).publishEvent(any(AgentsMdLimitReachedEvent.class));
 	}
 
 	private static ChatClientResponse response() {

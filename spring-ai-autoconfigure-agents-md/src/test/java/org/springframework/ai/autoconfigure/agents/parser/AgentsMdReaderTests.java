@@ -10,13 +10,13 @@ import org.springframework.core.io.ClassPathResource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class AgentsMdParserTests {
+class AgentsMdReaderTests {
 
-	private final AgentsMdParser parser = new AgentsMdParser();
+	private final AgentsMdReader reader = new AgentsMdReader();
 
 	@Test
 	void preservesArbitraryMarkdownFromResource() throws Exception {
-		AgentsMdDocument document = this.parser.parse(new ClassPathResource("sample-agents.md"));
+		AgentsMdDocument document = this.reader.read(new ClassPathResource("sample-agents.md"));
 
 		assertThat(document.content()).contains("# Sample AGENTS.md", "## Dev environment tips",
 				"## Testing instructions", "## PR instructions");
@@ -35,8 +35,8 @@ class AgentsMdParserTests {
 				| Test | `./mvnw test` |
 				""";
 
-		AgentsMdDocument document = this.parser
-			.parse(new ByteArrayInputStream(markdown.getBytes(StandardCharsets.UTF_8)));
+		AgentsMdDocument document = this.reader
+			.read(new ByteArrayInputStream(markdown.getBytes(StandardCharsets.UTF_8)));
 
 		assertThat(document.content()).isEqualTo(markdown);
 	}
@@ -45,13 +45,13 @@ class AgentsMdParserTests {
 	void preservesLineEndingsAndWhitespace() {
 		String markdown = "# Instructions\r\n\r\n  Keep indentation.  \r\n";
 
-		assertThat(this.parser.parse(markdown).content()).isEqualTo(markdown);
+		assertThat(this.reader.read(markdown).content()).isEqualTo(markdown);
 	}
 
 	@Test
 	void supportsAnEmptyDocumentAndRejectsNull() {
-		assertThat(this.parser.parse("").content()).isEmpty();
-		assertThatThrownBy(() -> this.parser.parse((String) null)).isInstanceOf(IllegalArgumentException.class);
+		assertThat(this.reader.read("").content()).isEmpty();
+		assertThatThrownBy(() -> this.reader.read((String) null)).isInstanceOf(IllegalArgumentException.class);
 	}
 
 }

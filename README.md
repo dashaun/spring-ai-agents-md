@@ -39,6 +39,9 @@ The [AGENTS.md format](https://agents.md) is standard Markdown:
 The library does not assign special meaning to heading names or rewrite the document into
 a project-specific schema. Each complete Markdown document is preserved unchanged inside
 a small framework-owned context envelope that declares user and hierarchical precedence.
+The injected block is delimited by `<!-- spring-ai-agents-md:start -->` and
+`<!-- spring-ai-agents-md:end -->` HTML comments so the advisor can replace it reliably
+when the active target changes, even when other advisors append to the system message.
 
 ## Current Functionality
 
@@ -51,9 +54,11 @@ a small framework-owned context envelope that declares user and hierarchical pre
 - Represent the complete document with an immutable Java 17 record.
 - Provide an `AgentsMdSystemAdvisor` for Spring AI 2.x synchronous and streaming
   `ChatClient` calls.
+- Build advisors with a fluent builder or a single-document factory.
 - Automatically attach the advisor to Spring AI's auto-configured `ChatClient.Builder`.
 - Auto-configure the reader, document, advisor, builder customizer, and configuration
   properties.
+- Optionally cache resolved documents with a configurable TTL.
 - Use JSpecify nullness annotations with non-null defaults across the public API.
 - Use Jackson 3 through Spring Boot 4.1 dependency management.
 
@@ -151,6 +156,19 @@ class AiConfiguration {
 }
 ```
 
+To create the advisor programmatically instead of relying on auto-configuration, use the
+fluent builder or the single-document factory:
+
+```java
+AgentsMdSystemAdvisor advisor = AgentsMdSystemAdvisor.builder()
+    .resolver(resolver)
+    .targetPathResolver(targetPathResolver)
+    .observationRegistry(observationRegistry)
+    .build();
+
+AgentsMdSystemAdvisor single = AgentsMdSystemAdvisor.of(new AgentsMdDocument(markdown));
+```
+
 Application code can then use the normal Spring AI API:
 
 ```java
@@ -197,9 +215,22 @@ String readFile(String path, ToolContext toolContext) {
 An explicit request target takes priority over a tool-propagated path. If neither is
 present, the starter resolves from the JVM working directory.
 
-Tool-propagated state belongs to the `ChatClient` built from that builder. Applications
-issuing concurrent requests for different workspaces should pass an explicit target on
-each request instead of relying on mutable active-path state.
+Tool-propagated state belongs to the `ChatClient` built from that builder. The active
+path is shared mutable state across every request on that `ChatClient`; it is designed
+for sequential tool loops, not for concurrent or cross-thread requests. Applications
+issuing concurrent requests for different workspaces must pass an explicit target on each
+request instead of relying on mutable active-path state:
+
+```java
+chatClient.prompt()
+    .advisors(AgentsMdAdvisorParams.target(Path.of("workspace-a/src/Example.java")))
+    .user(request)
+    .call();
+```
+
+When the active path is accessed from a different thread than the previous access, the
+starter logs a warning once so the misuse is visible instead of silent. The warning is
+informational; it does not change resolution behavior.
 
 Each advisor invocation resolves one active target. For operations spanning unrelated
 subtrees, filesystem tools should propagate the path for each operation, or the caller
@@ -218,6 +249,7 @@ not merge instructions from unrelated target paths into one request.
 | `spring.ai.agents-md.max-documents` | `16` | Maximum number of documents composed for one target. |
 | `spring.ai.agents-md.max-document-size` | `64KB` | Maximum UTF-8 byte size of one document. |
 | `spring.ai.agents-md.max-total-size` | `256KB` | Maximum UTF-8 byte size of the composed prompt context, including hierarchy headings. |
+| `spring.ai.agents-md.cache-ttl` | `0` | TTL for cached resolution results; `0` disables caching and keeps live reload. |
 
 If neither an applicable filesystem document nor the fallback resource exists, prompt
 augmentation is a no-op.
@@ -233,11 +265,17 @@ configuration binding.
 
 ## Live Reload
 
-Resolution happens for every Advisor invocation without caching document content. Changes
-to filesystem `AGENTS.md` files therefore apply to the next request or tool-loop pass;
-no application restart or file watcher is required. When a filesystem tool propagates a
-new active path, the advisor replaces its previously injected context with the newly
-applicable documents.
+By default, resolution happens for every Advisor invocation without caching document
+content. Changes to filesystem `AGENTS.md` files therefore apply to the next request or
+tool-loop pass; no application restart or file watcher is required. When a filesystem
+tool propagates a new active path, the advisor replaces its previously injected context
+with the newly applicable documents.
+
+For high-throughput deployments, set `spring.ai.agents-md.cache-ttl` to a positive
+duration (for example `5s`) to cache each resolved target for that period. Caching trades
+live-reload immediacy for reduced filesystem I/O: changes to `AGENTS.md` files are picked
+up only after the TTL expires. The cache is bounded and thread-safe; a zero TTL (the
+default) disables it entirely.
 
 Automatic attachment applies to Spring AI's auto-configured `ChatClient.Builder`.
 Clients created directly with `ChatClient.builder(chatModel)` or
@@ -314,13 +352,13 @@ spring-ai-agents-md/
 | :--- | :--- |
 | Compile | `./mvnw clean compile` |
 | Run all tests | `./mvnw clean test` |
-| Run document reader tests | `./mvnw -pl spring-ai-autoconfigure-agents-md test -Dtest=AgentsMdParserTests` |
+| Run document reader tests | `./mvnw -pl spring-ai-autoconfigure-agents-md test -Dtest=AgentsMdReaderTests` |
 | Apply formatting | `./mvnw spring-javaformat:apply` |
 | Analyze dependencies | `./mvnw dependency:analyze` |
 
 Spring Java Format validation runs during Maven's `validate` phase.
 JaCoCo runs during `verify` and requires at least 85% line coverage independently for the
-parser and advisor packages.
+reader, advisor, and discovery packages.
 
 ## Example Applications
 

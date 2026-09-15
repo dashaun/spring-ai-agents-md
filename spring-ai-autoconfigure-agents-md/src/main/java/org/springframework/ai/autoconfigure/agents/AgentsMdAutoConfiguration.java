@@ -14,7 +14,7 @@ import org.springframework.ai.autoconfigure.agents.advisor.DefaultAgentsMdTarget
 import org.springframework.ai.autoconfigure.agents.config.AgentsMdProperties;
 import org.springframework.ai.autoconfigure.agents.discovery.AgentsMdResolver;
 import org.springframework.ai.autoconfigure.agents.discovery.FilesystemAgentsMdResolver;
-import org.springframework.ai.autoconfigure.agents.parser.AgentsMdParser;
+import org.springframework.ai.autoconfigure.agents.parser.AgentsMdReader;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
 import org.springframework.beans.factory.ObjectProvider;
@@ -39,18 +39,20 @@ public class AgentsMdAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	AgentsMdParser agentsMdParser() {
-		return new AgentsMdParser();
+	AgentsMdReader agentsMdReader() {
+		return new AgentsMdReader();
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
-	AgentsMdResolver agentsMdResolver(AgentsMdParser parser, AgentsMdProperties properties,
+	AgentsMdResolver agentsMdResolver(AgentsMdReader reader, AgentsMdProperties properties,
 			ResourceLoader resourceLoader) {
-		return new FilesystemAgentsMdResolver(parser, resourceLoader, properties.getLocation(),
-				properties.getFallbackLocation(), workingDirectory(), properties.getMaxDepth(),
-				properties.getMaxDocuments(), properties.getMaxDocumentSize().toBytes(),
+		FilesystemAgentsMdResolver resolver = new FilesystemAgentsMdResolver(reader, resourceLoader,
+				properties.getLocation(), properties.getFallbackLocation(), workingDirectory(),
+				properties.getMaxDepth(), properties.getMaxDocuments(), properties.getMaxDocumentSize().toBytes(),
 				properties.getMaxTotalSize().toBytes());
+		resolver.setCacheTtl(properties.getCacheTtl());
+		return resolver;
 	}
 
 	@Bean
@@ -66,9 +68,13 @@ public class AgentsMdAutoConfiguration {
 	AgentsMdSystemAdvisor agentsMdSystemAdvisor(AgentsMdResolver resolver,
 			AgentsMdTargetPathResolver targetPathResolver, ObjectProvider<ObservationRegistry> observationRegistry,
 			ObjectProvider<MeterRegistry> meterRegistry, ApplicationEventPublisher eventPublisher) {
-		return new AgentsMdSystemAdvisor(resolver, targetPathResolver,
-				observationRegistry.getIfAvailable(() -> ObservationRegistry.NOOP), meterRegistry.getIfAvailable(),
-				eventPublisher);
+		return AgentsMdSystemAdvisor.builder()
+			.resolver(resolver)
+			.targetPathResolver(targetPathResolver)
+			.observationRegistry(observationRegistry.getIfAvailable(() -> ObservationRegistry.NOOP))
+			.meterRegistry(meterRegistry.getIfAvailable())
+			.eventPublisher(eventPublisher)
+			.build();
 	}
 
 	@Bean

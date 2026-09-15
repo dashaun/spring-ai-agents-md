@@ -2,11 +2,12 @@ package org.springframework.ai.autoconfigure.agents.discovery;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import org.springframework.ai.autoconfigure.agents.parser.AgentsMdParser;
+import org.springframework.ai.autoconfigure.agents.parser.AgentsMdReader;
 import org.springframework.core.io.DefaultResourceLoader;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -135,7 +136,7 @@ class FilesystemAgentsMdResolverTests {
 		Path repository = Files.createDirectories(this.temporaryDirectory.resolve("repository"));
 		Files.createDirectory(repository.resolve(".git"));
 		Files.writeString(repository.resolve("AGENTS.md"), "# Filesystem instructions");
-		FilesystemAgentsMdResolver resolver = new FilesystemAgentsMdResolver(new AgentsMdParser(),
+		FilesystemAgentsMdResolver resolver = new FilesystemAgentsMdResolver(new AgentsMdReader(),
 				new DefaultResourceLoader(), "classpath:sample-agents.md", "classpath:AGENTS.md", repository);
 
 		AgentsMdResolution resolution = resolver.resolve(repository);
@@ -147,7 +148,7 @@ class FilesystemAgentsMdResolverTests {
 
 	@Test
 	void explicitlyConfiguredMissingResourceFailsClearly() {
-		FilesystemAgentsMdResolver resolver = new FilesystemAgentsMdResolver(new AgentsMdParser(),
+		FilesystemAgentsMdResolver resolver = new FilesystemAgentsMdResolver(new AgentsMdReader(),
 				new DefaultResourceLoader(), "classpath:missing-agents.md", "classpath:AGENTS.md",
 				this.temporaryDirectory);
 
@@ -165,6 +166,41 @@ class FilesystemAgentsMdResolverTests {
 
 		assertThat(resolver.resolve(repository).toSystemPromptContext()).contains("# First version");
 		Files.writeString(instructions, "# Reloaded version");
+
+		assertThat(resolver.resolve(repository).toSystemPromptContext()).contains("# Reloaded version")
+			.doesNotContain("# First version");
+	}
+
+	@Test
+	void cachesResolutionWithinTheTtl() throws Exception {
+		Path repository = Files.createDirectories(this.temporaryDirectory.resolve("repository"));
+		Files.createDirectory(repository.resolve(".git"));
+		Path instructions = repository.resolve("AGENTS.md");
+		Files.writeString(instructions, "# First version");
+		FilesystemAgentsMdResolver resolver = resolver(repository);
+		resolver.setCacheTtl(Duration.ofHours(1));
+
+		assertThat(resolver.resolve(repository).toSystemPromptContext()).contains("# First version");
+		Files.writeString(instructions, "# Reloaded version");
+
+		assertThat(resolver.resolve(repository).toSystemPromptContext()).contains("# First version")
+			.doesNotContain("# Reloaded version");
+	}
+
+	@Test
+	void cacheExpiresAfterTheTtl() throws Exception {
+		Path repository = Files.createDirectories(this.temporaryDirectory.resolve("repository"));
+		Files.createDirectory(repository.resolve(".git"));
+		Path instructions = repository.resolve("AGENTS.md");
+		Files.writeString(instructions, "# First version");
+		FilesystemAgentsMdResolver resolver = resolver(repository);
+		resolver.setCacheTtl(Duration.ofMillis(50));
+
+		assertThat(resolver.resolve(repository).toSystemPromptContext()).contains("# First version");
+		Files.writeString(instructions, "# Reloaded version");
+		assertThat(resolver.resolve(repository).toSystemPromptContext()).contains("# First version");
+
+		Thread.sleep(100);
 
 		assertThat(resolver.resolve(repository).toSystemPromptContext()).contains("# Reloaded version")
 			.doesNotContain("# First version");
@@ -228,13 +264,13 @@ class FilesystemAgentsMdResolverTests {
 	}
 
 	private FilesystemAgentsMdResolver resolver(Path workingDirectory) {
-		return new FilesystemAgentsMdResolver(new AgentsMdParser(), new DefaultResourceLoader(),
+		return new FilesystemAgentsMdResolver(new AgentsMdReader(), new DefaultResourceLoader(),
 				"classpath:sample-agents.md", workingDirectory);
 	}
 
 	private FilesystemAgentsMdResolver resolver(Path workingDirectory, int maxDepth, int maxDocuments,
 			long maxDocumentSize, long maxTotalSize) {
-		return new FilesystemAgentsMdResolver(new AgentsMdParser(), new DefaultResourceLoader(), null,
+		return new FilesystemAgentsMdResolver(new AgentsMdReader(), new DefaultResourceLoader(), null,
 				"classpath:sample-agents.md", workingDirectory, maxDepth, maxDocuments, maxDocumentSize, maxTotalSize);
 	}
 

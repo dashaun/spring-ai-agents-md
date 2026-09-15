@@ -40,23 +40,7 @@ public record AgentsMdResolution(Path target, List<AgentsMdResource> resources, 
 	 * @return system-prompt context, or an empty string when nothing applies
 	 */
 	public String toSystemPromptContext() {
-		if (this.resources.isEmpty()) {
-			return "";
-		}
-		StringBuilder context = new StringBuilder("# AGENTS.md instructions\n\n").append(
-				"Apply these project instructions to the current task. When an explicit instruction in the current ")
-			.append("user request conflicts with these instructions, follow the explicit user instruction.\n");
-		if (this.resources.size() > 1) {
-			context.append("\nDocuments are ordered from broadest scope to closest scope. ")
-				.append("When document instructions conflict, the closest document takes precedence.\n");
-		}
-		for (AgentsMdResource resource : this.resources) {
-			context.append("\n## ")
-				.append(resource.location())
-				.append("\n\n")
-				.append(resource.document().toSystemPromptContext());
-		}
-		return context.toString();
+		return AgentsMdContextFormatter.format(this.resources);
 	}
 
 }

@@ -6,7 +6,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import org.springframework.ai.autoconfigure.agents.parser.AgentsMdParser;
+import org.springframework.ai.autoconfigure.agents.parser.AgentsMdReader;
 import org.springframework.core.io.DefaultResourceLoader;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -89,7 +89,7 @@ class AgentsMdHierarchyConformanceTests {
 	}
 
 	private FilesystemAgentsMdResolver resolver(Path workingDirectory) {
-		return new FilesystemAgentsMdResolver(new AgentsMdParser(), new DefaultResourceLoader(),
+		return new FilesystemAgentsMdResolver(new AgentsMdReader(), new DefaultResourceLoader(),
 				"classpath:sample-agents.md", workingDirectory);
 	}
 

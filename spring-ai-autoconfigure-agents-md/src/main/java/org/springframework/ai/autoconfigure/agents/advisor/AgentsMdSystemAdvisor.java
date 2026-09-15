@@ -2,9 +2,7 @@ package org.springframework.ai.autoconfigure.agents.advisor;
 
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
@@ -35,10 +33,16 @@ import reactor.core.publisher.Flux;
 
 /**
  * Adds parsed AGENTS.md instructions to a Spring AI system message.
+ *
+ * <p>
+ * Create instances with {@link #builder()} or the single-document convenience
+ * {@link #of(AgentsMdDocument)}.
  */
 public class AgentsMdSystemAdvisor implements CallAdvisor, StreamAdvisor {
 
-	private static final String INJECTED_CONTEXT = "spring.ai.agents-md.injected-context";
+	private static final String CONTEXT_START = "<!-- spring-ai-agents-md:start -->";
+
+	private static final String CONTEXT_END = "<!-- spring-ai-agents-md:end -->";
 
 	private final AgentsMdResolver resolver;
 
@@ -50,46 +54,134 @@ public class AgentsMdSystemAdvisor implements CallAdvisor, StreamAdvisor {
 
 	private final @Nullable ApplicationEventPublisher eventPublisher;
 
+	/**
+	 * Create an advisor that always injects a single document.
+	 * @param document the document to inject
+	 * @deprecated use {@link #of(AgentsMdDocument)}
+	 */
+	@Deprecated
 	public AgentsMdSystemAdvisor(AgentsMdDocument document) {
 		this(document, ObservationRegistry.NOOP);
 	}
 
+	/**
+	 * Create an advisor that always injects a single document.
+	 * @param document the document to inject
+	 * @param observationRegistry registry used for advisor observations
+	 * @deprecated use {@link #of(AgentsMdDocument, ObservationRegistry)}
+	 */
+	@Deprecated
 	public AgentsMdSystemAdvisor(AgentsMdDocument document, ObservationRegistry observationRegistry) {
-		Assert.notNull(document, "AgentsMdDocument must not be null");
-		this.resolver = target -> new AgentsMdResolution(target,
-				List.of(new AgentsMdResource("provided AGENTS.md", document)));
-		this.targetPathResolver = new DefaultAgentsMdTargetPathResolver(Path.of(System.getProperty("user.dir")));
-		Assert.notNull(observationRegistry, "ObservationRegistry must not be null");
-		this.observationRegistry = observationRegistry;
-		this.contextSize = null;
-		this.eventPublisher = null;
+		this(builder().resolver(documentResolver(document))
+			.targetPathResolver(defaultTargetPathResolver())
+			.observationRegistry(observationRegistry));
 	}
 
+	/**
+	 * Create an advisor that resolves instructions through a resolver.
+	 * @param resolver resolves applicable documents for a target
+	 * @param targetPathResolver resolves the request target
+	 * @param observationRegistry registry used for advisor observations
+	 * @deprecated use {@link #builder()}
+	 */
+	@Deprecated
 	public AgentsMdSystemAdvisor(AgentsMdResolver resolver, AgentsMdTargetPathResolver targetPathResolver,
 			ObservationRegistry observationRegistry) {
-		this(resolver, targetPathResolver, observationRegistry, null);
+		this(builder().resolver(resolver)
+			.targetPathResolver(targetPathResolver)
+			.observationRegistry(observationRegistry));
 	}
 
+	/**
+	 * Create an advisor that resolves instructions through a resolver.
+	 * @param resolver resolves applicable documents for a target
+	 * @param targetPathResolver resolves the request target
+	 * @param observationRegistry registry used for advisor observations
+	 * @param meterRegistry registry used for the context-size summary, or {@code null}
+	 * @deprecated use {@link #builder()}
+	 */
+	@Deprecated
 	public AgentsMdSystemAdvisor(AgentsMdResolver resolver, AgentsMdTargetPathResolver targetPathResolver,
 			ObservationRegistry observationRegistry, @Nullable MeterRegistry meterRegistry) {
-		this(resolver, targetPathResolver, observationRegistry, meterRegistry, null);
+		this(builder().resolver(resolver)
+			.targetPathResolver(targetPathResolver)
+			.observationRegistry(observationRegistry)
+			.meterRegistry(meterRegistry));
 	}
 
+	/**
+	 * Create an advisor that resolves instructions through a resolver.
+	 * @param resolver resolves applicable documents for a target
+	 * @param targetPathResolver resolves the request target
+	 * @param observationRegistry registry used for advisor observations
+	 * @param meterRegistry registry used for the context-size summary, or {@code null}
+	 * @param eventPublisher publisher for limit-reached events, or {@code null}
+	 * @deprecated use {@link #builder()}
+	 */
+	@Deprecated
 	public AgentsMdSystemAdvisor(AgentsMdResolver resolver, AgentsMdTargetPathResolver targetPathResolver,
 			ObservationRegistry observationRegistry, @Nullable MeterRegistry meterRegistry,
 			@Nullable ApplicationEventPublisher eventPublisher) {
-		Assert.notNull(resolver, "AgentsMdResolver must not be null");
-		Assert.notNull(targetPathResolver, "AgentsMdTargetPathResolver must not be null");
-		Assert.notNull(observationRegistry, "ObservationRegistry must not be null");
-		this.resolver = resolver;
-		this.targetPathResolver = targetPathResolver;
-		this.observationRegistry = observationRegistry;
-		this.contextSize = meterRegistry == null ? null
+		this(builder().resolver(resolver)
+			.targetPathResolver(targetPathResolver)
+			.observationRegistry(observationRegistry)
+			.meterRegistry(meterRegistry)
+			.eventPublisher(eventPublisher));
+	}
+
+	private AgentsMdSystemAdvisor(Builder builder) {
+		Assert.notNull(builder.resolver, "AgentsMdResolver must not be null");
+		Assert.notNull(builder.targetPathResolver, "AgentsMdTargetPathResolver must not be null");
+		Assert.notNull(builder.observationRegistry, "ObservationRegistry must not be null");
+		this.resolver = builder.resolver;
+		this.targetPathResolver = builder.targetPathResolver;
+		this.observationRegistry = builder.observationRegistry;
+		this.contextSize = builder.meterRegistry == null ? null
 				: DistributionSummary.builder(AgentsMdObservations.CONTEXT_SIZE)
 					.description("Size of AGENTS.md context added to the system prompt")
 					.baseUnit("characters")
-					.register(meterRegistry);
-		this.eventPublisher = eventPublisher;
+					.register(builder.meterRegistry);
+		this.eventPublisher = builder.eventPublisher;
+	}
+
+	/**
+	 * Create an advisor that always injects a single document.
+	 * @param document the document to inject
+	 * @return a new advisor
+	 */
+	public static AgentsMdSystemAdvisor of(AgentsMdDocument document) {
+		return of(document, ObservationRegistry.NOOP);
+	}
+
+	/**
+	 * Create an advisor that always injects a single document.
+	 * @param document the document to inject
+	 * @param observationRegistry registry used for advisor observations
+	 * @return a new advisor
+	 */
+	public static AgentsMdSystemAdvisor of(AgentsMdDocument document, ObservationRegistry observationRegistry) {
+		Assert.notNull(document, "AgentsMdDocument must not be null");
+		Assert.notNull(observationRegistry, "ObservationRegistry must not be null");
+		return builder().resolver(documentResolver(document))
+			.targetPathResolver(defaultTargetPathResolver())
+			.observationRegistry(observationRegistry)
+			.build();
+	}
+
+	/**
+	 * Start building an advisor that resolves instructions through a resolver.
+	 * @return a new builder
+	 */
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	private static AgentsMdResolver documentResolver(AgentsMdDocument document) {
+		return target -> new AgentsMdResolution(target, List.of(new AgentsMdResource("provided AGENTS.md", document)));
+	}
+
+	private static AgentsMdTargetPathResolver defaultTargetPathResolver() {
+		return new DefaultAgentsMdTargetPathResolver(Path.of(System.getProperty("user.dir")));
 	}
 
 	@Override
@@ -117,17 +209,8 @@ public class AgentsMdSystemAdvisor implements CallAdvisor, StreamAdvisor {
 	}
 
 	private ChatClientRequest augment(ChatClientRequest request, String context) {
-		String previousContext = request.context().get(INJECTED_CONTEXT) instanceof String value ? value : "";
-		Prompt prompt = request.prompt()
-			.augmentSystemMessage(systemMessage -> replace(systemMessage, previousContext, context));
-		Map<String, Object> requestContext = new HashMap<>(request.context());
-		if (context.isBlank()) {
-			requestContext.remove(INJECTED_CONTEXT);
-		}
-		else {
-			requestContext.put(INJECTED_CONTEXT, context);
-		}
-		return request.mutate().prompt(prompt).context(requestContext).build();
+		Prompt prompt = request.prompt().augmentSystemMessage(systemMessage -> replace(systemMessage, context));
+		return request.mutate().prompt(prompt).build();
 	}
 
 	private ChatClientRequest observeAugmentation(ChatClientRequest request) {
@@ -165,16 +248,100 @@ public class AgentsMdSystemAdvisor implements CallAdvisor, StreamAdvisor {
 		return count == 1 ? AgentsMdObservations.DOCUMENT_COUNT_ONE : AgentsMdObservations.DOCUMENT_COUNT_MULTIPLE;
 	}
 
-	private SystemMessage replace(SystemMessage systemMessage, String previousContext, String context) {
+	private SystemMessage replace(SystemMessage systemMessage, String context) {
 		String existing = systemMessage.getText() == null ? "" : systemMessage.getText();
-		if (!previousContext.isBlank() && existing.endsWith(previousContext)) {
-			existing = existing.substring(0, existing.length() - previousContext.length());
-			if (existing.endsWith("\n\n")) {
-				existing = existing.substring(0, existing.length() - 2);
-			}
+		int start = existing.indexOf(CONTEXT_START);
+		int end = existing.indexOf(CONTEXT_END);
+		if (start >= 0 && end > start) {
+			existing = existing.substring(0, start) + existing.substring(end + CONTEXT_END.length());
 		}
-		String separator = existing.isBlank() || context.isBlank() ? "" : "\n\n";
-		return systemMessage.mutate().text(existing + separator + context).build();
+		if (context.isBlank()) {
+			return systemMessage.mutate().text(existing.stripTrailing()).build();
+		}
+		String separator = existing.isBlank() ? "" : "\n\n";
+		String wrapped = CONTEXT_START + "\n" + context + "\n" + CONTEXT_END;
+		return systemMessage.mutate().text(existing + separator + wrapped).build();
+	}
+
+	/**
+	 * Builder for {@link AgentsMdSystemAdvisor}.
+	 */
+	public static class Builder {
+
+		private @Nullable AgentsMdResolver resolver;
+
+		private @Nullable AgentsMdTargetPathResolver targetPathResolver;
+
+		private ObservationRegistry observationRegistry = ObservationRegistry.NOOP;
+
+		private @Nullable MeterRegistry meterRegistry;
+
+		private @Nullable ApplicationEventPublisher eventPublisher;
+
+		private Builder() {
+		}
+
+		/**
+		 * Set the resolver that resolves applicable documents for a target.
+		 * @param resolver the resolver
+		 * @return this builder
+		 */
+		public Builder resolver(AgentsMdResolver resolver) {
+			Assert.notNull(resolver, "AgentsMdResolver must not be null");
+			this.resolver = resolver;
+			return this;
+		}
+
+		/**
+		 * Set the resolver that resolves the request target.
+		 * @param targetPathResolver the target-path resolver
+		 * @return this builder
+		 */
+		public Builder targetPathResolver(AgentsMdTargetPathResolver targetPathResolver) {
+			Assert.notNull(targetPathResolver, "AgentsMdTargetPathResolver must not be null");
+			this.targetPathResolver = targetPathResolver;
+			return this;
+		}
+
+		/**
+		 * Set the registry used for advisor observations.
+		 * @param observationRegistry the observation registry
+		 * @return this builder
+		 */
+		public Builder observationRegistry(ObservationRegistry observationRegistry) {
+			Assert.notNull(observationRegistry, "ObservationRegistry must not be null");
+			this.observationRegistry = observationRegistry;
+			return this;
+		}
+
+		/**
+		 * Set the registry used for the context-size summary.
+		 * @param meterRegistry the meter registry, or {@code null} to disable the summary
+		 * @return this builder
+		 */
+		public Builder meterRegistry(@Nullable MeterRegistry meterRegistry) {
+			this.meterRegistry = meterRegistry;
+			return this;
+		}
+
+		/**
+		 * Set the publisher for limit-reached events.
+		 * @param eventPublisher the event publisher, or {@code null} to disable events
+		 * @return this builder
+		 */
+		public Builder eventPublisher(@Nullable ApplicationEventPublisher eventPublisher) {
+			this.eventPublisher = eventPublisher;
+			return this;
+		}
+
+		/**
+		 * Build the advisor.
+		 * @return a new advisor
+		 */
+		public AgentsMdSystemAdvisor build() {
+			return new AgentsMdSystemAdvisor(this);
+		}
+
 	}
 
 }

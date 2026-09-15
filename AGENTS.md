@@ -16,7 +16,7 @@ Run these exact commands from the repository root:
 - **Build project:** `./mvnw clean compile`
 - **Run all tests:** `./mvnw clean test`
 - **Run single test:**
-  `./mvnw -pl spring-ai-autoconfigure-agents-md test -Dtest=AgentsMdParserTests`
+  `./mvnw -pl spring-ai-autoconfigure-agents-md test -Dtest=AgentsMdReaderTests`
 - **Apply code formatting:** `./mvnw spring-javaformat:apply`
 - **Validate dependencies:** `./mvnw dependency:analyze`
 
@@ -25,7 +25,7 @@ Run these exact commands from the repository root:
 ## Required practices
 
 - Run `./mvnw spring-javaformat:apply` before finishing any code modifications.
-- Keep test coverage above 85% for document loading and advisor logic.
+- Keep test coverage above 85% for the reader, advisor, and discovery packages.
 - Keep imports compliant with Java 17 standards; do not use `sun.misc.*` or deprecated
   Spring AI APIs.
 - Use `@AutoConfiguration` for Spring Boot auto-configuration classes.
@@ -33,6 +33,8 @@ Run these exact commands from the repository root:
   messages.
 - Keep observation tags low-cardinality and use Spring Boot's configured
   `ObservationRegistry` when available.
+- Do not use Python for ad-hoc tooling or analysis scripts; use Java (for example
+  `jshell` or a small Java class) instead.
 
 ## Changes that require discussion
 

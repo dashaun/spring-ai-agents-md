@@ -5,15 +5,17 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.springframework.ai.autoconfigure.agents.parser.AgentsMdParser;
+import org.springframework.ai.autoconfigure.agents.parser.AgentsMdReader;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.util.Assert;
@@ -36,7 +38,9 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 
 	private static final long DEFAULT_MAX_TOTAL_SIZE = 256 * 1024;
 
-	private final AgentsMdParser parser;
+	private static final int MAX_CACHE_ENTRIES = 1000;
+
+	private final AgentsMdReader reader;
 
 	private final ResourceLoader resourceLoader;
 
@@ -54,22 +58,26 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 
 	private final long maxTotalSize;
 
-	public FilesystemAgentsMdResolver(AgentsMdParser parser, ResourceLoader resourceLoader, String fallbackLocation,
+	private final ConcurrentHashMap<Path, CacheEntry> cache = new ConcurrentHashMap<>();
+
+	private Duration cacheTtl = Duration.ZERO;
+
+	public FilesystemAgentsMdResolver(AgentsMdReader reader, ResourceLoader resourceLoader, String fallbackLocation,
 			Path workingDirectory) {
-		this(parser, resourceLoader, null, fallbackLocation, workingDirectory, DEFAULT_MAX_DEPTH, DEFAULT_MAX_DOCUMENTS,
+		this(reader, resourceLoader, null, fallbackLocation, workingDirectory, DEFAULT_MAX_DEPTH, DEFAULT_MAX_DOCUMENTS,
 				DEFAULT_MAX_DOCUMENT_SIZE, DEFAULT_MAX_TOTAL_SIZE);
 	}
 
-	public FilesystemAgentsMdResolver(AgentsMdParser parser, ResourceLoader resourceLoader,
+	public FilesystemAgentsMdResolver(AgentsMdReader reader, ResourceLoader resourceLoader,
 			@Nullable String explicitLocation, String fallbackLocation, Path workingDirectory) {
-		this(parser, resourceLoader, explicitLocation, fallbackLocation, workingDirectory, DEFAULT_MAX_DEPTH,
+		this(reader, resourceLoader, explicitLocation, fallbackLocation, workingDirectory, DEFAULT_MAX_DEPTH,
 				DEFAULT_MAX_DOCUMENTS, DEFAULT_MAX_DOCUMENT_SIZE, DEFAULT_MAX_TOTAL_SIZE);
 	}
 
-	public FilesystemAgentsMdResolver(AgentsMdParser parser, ResourceLoader resourceLoader,
+	public FilesystemAgentsMdResolver(AgentsMdReader reader, ResourceLoader resourceLoader,
 			@Nullable String explicitLocation, String fallbackLocation, Path workingDirectory, int maxDepth,
 			int maxDocuments, long maxDocumentSize, long maxTotalSize) {
-		Assert.notNull(parser, "AgentsMdParser must not be null");
+		Assert.notNull(reader, "AgentsMdReader must not be null");
 		Assert.notNull(resourceLoader, "ResourceLoader must not be null");
 		if (explicitLocation != null) {
 			Assert.hasText(explicitLocation, "Explicit location must not be empty");
@@ -82,7 +90,7 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 				"Max document size must be between 1 byte and 2 GB");
 		Assert.isTrue(maxTotalSize > 0 && maxTotalSize < Integer.MAX_VALUE,
 				"Max total size must be between 1 byte and 2 GB");
-		this.parser = parser;
+		this.reader = reader;
 		this.resourceLoader = resourceLoader;
 		this.explicitLocation = explicitLocation;
 		this.fallbackLocation = fallbackLocation;
@@ -93,10 +101,50 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 		this.maxTotalSize = maxTotalSize;
 	}
 
+	/**
+	 * Set the TTL for cached resolution results. A zero duration disables caching and
+	 * keeps live reload behavior. A positive duration caches each resolved target for
+	 * that period, trading live-reload immediacy for reduced filesystem I/O.
+	 * @param cacheTtl cache TTL, or {@link Duration#ZERO} to disable caching
+	 */
+	public void setCacheTtl(Duration cacheTtl) {
+		Assert.notNull(cacheTtl, "Cache TTL must not be null");
+		Assert.isTrue(!cacheTtl.isNegative(), "Cache TTL must not be negative");
+		this.cacheTtl = cacheTtl;
+	}
+
 	@Override
 	public AgentsMdResolution resolve(Path target) {
 		Assert.notNull(target, "Target must not be null");
 		Path normalizedTarget = normalize(target);
+		if (this.cacheTtl.isZero()) {
+			return resolveUncached(normalizedTarget);
+		}
+		AgentsMdResolution cached = cachedResolution(normalizedTarget);
+		if (cached != null) {
+			return cached;
+		}
+		AgentsMdResolution resolution = resolveUncached(normalizedTarget);
+		if (this.cache.size() >= MAX_CACHE_ENTRIES) {
+			this.cache.clear();
+		}
+		this.cache.put(normalizedTarget, new CacheEntry(resolution, System.nanoTime()));
+		return resolution;
+	}
+
+	private @Nullable AgentsMdResolution cachedResolution(Path target) {
+		CacheEntry entry = this.cache.get(target);
+		if (entry == null) {
+			return null;
+		}
+		if (System.nanoTime() - entry.timestamp() > this.cacheTtl.toNanos()) {
+			this.cache.remove(target, entry);
+			return null;
+		}
+		return entry.resolution();
+	}
+
+	private AgentsMdResolution resolveUncached(Path normalizedTarget) {
 		if (this.explicitLocation != null) {
 			LoadedResource configured = requiredResource(this.explicitLocation);
 			return resolution(normalizedTarget, configured);
@@ -114,7 +162,7 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 
 	private AgentsMdResolution resolution(Path target, LoadedResource loaded) {
 		if (loaded.sizeLimit() || loaded.resource() == null
-				|| contextSize(List.of(loaded.resource())) > this.maxTotalSize) {
+				|| AgentsMdContextFormatter.byteSize(List.of(loaded.resource())) > this.maxTotalSize) {
 			if (loaded.resource() != null) {
 				logger.warn("Ignoring AGENTS.md at {} because it exceeds the {} byte aggregate limit",
 						loaded.resource().location(), this.maxTotalSize);
@@ -188,6 +236,7 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 		}
 		Collections.reverse(candidates);
 		List<AgentsMdResource> resources = new ArrayList<>();
+		long contextSize = 0;
 		for (Path candidate : candidates) {
 			if (resources.size() >= this.maxDocuments) {
 				logger.warn("Stopped AGENTS.md composition at the configured document limit of {}", this.maxDocuments);
@@ -207,13 +256,17 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 					configuredLimit = this.maxDocumentSize;
 					continue;
 				}
-				if (contextSizeWith(resources, loaded.resource()) > this.maxTotalSize) {
+				long added = AgentsMdContextFormatter.documentBytes(loaded.resource());
+				long envelope = resources.isEmpty() ? AgentsMdContextFormatter.preambleBytes()
+						: (resources.size() == 1 ? AgentsMdContextFormatter.multiDocumentBytes() : 0);
+				if (contextSize + added + envelope > this.maxTotalSize) {
 					logger.warn("Stopped AGENTS.md composition before exceeding the {} byte aggregate limit",
 							this.maxTotalSize);
 					outcome = AgentsMdResolutionOutcome.SIZE_LIMIT;
 					configuredLimit = this.maxTotalSize;
 					break;
 				}
+				contextSize += added + envelope;
 				resources.add(loaded.resource());
 			}
 			catch (IOException ex) {
@@ -222,17 +275,6 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 		}
 		return new FilesystemResult(resources, outcome, configuredLimit,
 				!candidates.isEmpty() || outcome != AgentsMdResolutionOutcome.COMPLETE);
-	}
-
-	private long contextSizeWith(List<AgentsMdResource> resources, AgentsMdResource candidate) {
-		List<AgentsMdResource> proposed = new ArrayList<>(resources);
-		proposed.add(candidate);
-		return contextSize(proposed);
-	}
-
-	private long contextSize(List<AgentsMdResource> resources) {
-		return new AgentsMdResolution(this.workingDirectory, resources).toSystemPromptContext()
-			.getBytes(StandardCharsets.UTF_8).length;
 	}
 
 	private LoadedResource readResource(Resource resource, String location, String description) throws IOException {
@@ -246,7 +288,7 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 			return LoadedResource.sizeExceeded();
 		}
 		AgentsMdResource loaded = new AgentsMdResource(location,
-				this.parser.parse(new String(bytes, StandardCharsets.UTF_8)));
+				this.reader.read(new String(bytes, StandardCharsets.UTF_8)));
 		logger.debug("Loaded {} AGENTS.md from {} ({} bytes, {} characters)", description, location, bytes.length,
 				loaded.document().content().length());
 		return new LoadedResource(loaded, false);
@@ -299,6 +341,9 @@ public class FilesystemAgentsMdResolver implements AgentsMdResolver {
 		private static LoadedResource sizeExceeded() {
 			return new LoadedResource(null, true);
 		}
+	}
+
+	private record CacheEntry(AgentsMdResolution resolution, long timestamp) {
 	}
 
 }

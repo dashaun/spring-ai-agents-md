@@ -1,5 +1,6 @@
 package org.springframework.ai.autoconfigure.agents.config;
 
+import java.time.Duration;
 import java.util.Objects;
 
 import org.jspecify.annotations.Nullable;
@@ -43,6 +44,9 @@ public class AgentsMdProperties {
 	 */
 	private DataSize maxTotalSize = DataSize.ofKilobytes(256);
 
+	/** TTL for cached resolution results; zero disables caching. */
+	private Duration cacheTtl = Duration.ZERO;
+
 	public boolean isEnabled() {
 		return this.enabled;
 	}
@@ -67,7 +71,10 @@ public class AgentsMdProperties {
 	}
 
 	public void setFallbackLocation(String fallbackLocation) {
-		this.fallbackLocation = Objects.requireNonNull(fallbackLocation, "fallbackLocation must not be null");
+		if (fallbackLocation == null || fallbackLocation.isBlank()) {
+			throw new IllegalArgumentException("fallbackLocation must not be blank");
+		}
+		this.fallbackLocation = fallbackLocation;
 	}
 
 	public boolean isInjectIntoSystemPrompt() {
@@ -114,6 +121,18 @@ public class AgentsMdProperties {
 
 	public void setMaxTotalSize(DataSize maxTotalSize) {
 		this.maxTotalSize = validSize(maxTotalSize, "maxTotalSize");
+	}
+
+	public Duration getCacheTtl() {
+		return this.cacheTtl;
+	}
+
+	public void setCacheTtl(Duration cacheTtl) {
+		Objects.requireNonNull(cacheTtl, "cacheTtl must not be null");
+		if (cacheTtl.isNegative()) {
+			throw new IllegalArgumentException("cacheTtl must not be negative");
+		}
+		this.cacheTtl = cacheTtl;
 	}
 
 	private DataSize validSize(DataSize size, String name) {

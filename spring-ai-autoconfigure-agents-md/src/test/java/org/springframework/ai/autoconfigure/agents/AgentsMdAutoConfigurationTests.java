@@ -1,6 +1,7 @@
 package org.springframework.ai.autoconfigure.agents;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -12,7 +13,7 @@ import org.springframework.ai.autoconfigure.agents.advisor.AgentsMdSystemAdvisor
 import org.springframework.ai.autoconfigure.agents.advisor.AgentsMdTargetPathResolver;
 import org.springframework.ai.autoconfigure.agents.config.AgentsMdProperties;
 import org.springframework.ai.autoconfigure.agents.discovery.AgentsMdResolver;
-import org.springframework.ai.autoconfigure.agents.parser.AgentsMdParser;
+import org.springframework.ai.autoconfigure.agents.parser.AgentsMdReader;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -35,7 +36,7 @@ class AgentsMdAutoConfigurationTests {
 	void configuresResolverPropertiesAdvisorAndBuilderCustomizer() {
 		this.contextRunner.withPropertyValues("spring.ai.agents-md.location=classpath:sample-agents.md")
 			.run(context -> {
-				assertThat(context).hasSingleBean(AgentsMdParser.class)
+				assertThat(context).hasSingleBean(AgentsMdReader.class)
 					.hasSingleBean(AgentsMdResolver.class)
 					.hasSingleBean(AgentsMdTargetPathResolver.class)
 					.hasSingleBean(AgentsMdProperties.class)
@@ -62,7 +63,7 @@ class AgentsMdAutoConfigurationTests {
 	@Test
 	void backsOffWhenDisabled() {
 		this.contextRunner.withPropertyValues("spring.ai.agents-md.enabled=false")
-			.run(context -> assertThat(context).doesNotHaveBean(AgentsMdParser.class)
+			.run(context -> assertThat(context).doesNotHaveBean(AgentsMdReader.class)
 				.doesNotHaveBean(AgentsMdResolver.class)
 				.doesNotHaveBean(AgentsMdSystemAdvisor.class));
 	}
@@ -71,7 +72,7 @@ class AgentsMdAutoConfigurationTests {
 	void backsOffWhenSpringAiChatClientIsAbsent() {
 		this.contextRunner.withClassLoader(new FilteredClassLoader(ChatClient.class))
 			.run(context -> assertThat(context).hasNotFailed()
-				.doesNotHaveBean(AgentsMdParser.class)
+				.doesNotHaveBean(AgentsMdReader.class)
 				.doesNotHaveBean(AgentsMdResolver.class)
 				.doesNotHaveBean(AgentsMdSystemAdvisor.class));
 	}
@@ -102,11 +103,24 @@ class AgentsMdAutoConfigurationTests {
 		assertThat(properties.getMaxDocuments()).isEqualTo(16);
 		assertThat(properties.getMaxDocumentSize()).isEqualTo(DataSize.ofKilobytes(64));
 		assertThat(properties.getMaxTotalSize()).isEqualTo(DataSize.ofKilobytes(256));
+		assertThat(properties.getCacheTtl()).isEqualTo(Duration.ZERO);
 	}
 
 	@Test
 	void rejectsInvalidSafetyLimitsDuringConfigurationBinding() {
 		this.contextRunner.withPropertyValues("spring.ai.agents-md.max-depth=0")
+			.run(context -> assertThat(context).hasFailed());
+	}
+
+	@Test
+	void rejectsNegativeCacheTtlDuringConfigurationBinding() {
+		this.contextRunner.withPropertyValues("spring.ai.agents-md.cache-ttl=-1s")
+			.run(context -> assertThat(context).hasFailed());
+	}
+
+	@Test
+	void rejectsBlankFallbackLocationDuringConfigurationBinding() {
+		this.contextRunner.withPropertyValues("spring.ai.agents-md.fallback-location=")
 			.run(context -> assertThat(context).hasFailed());
 	}
 

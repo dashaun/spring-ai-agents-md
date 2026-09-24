@@ -5,7 +5,7 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>io.github.spring-ai-community</groupId>
+		<groupId>org.springaicommunity</groupId>
 		<artifactId>spring-ai-agents-md-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 		<relativePath>../pom.xml</relativePath>

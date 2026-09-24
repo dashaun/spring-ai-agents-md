@@ -1,0 +1,15 @@
+# Project configuration for Spring AI Community onboarding.
+#
+# See https://github.com/spring-ai-community/community-workflows/blob/main/.github/project.yml.template
+# for the full template and available options.
+
+name: spring-ai-agents-md
+
+release:
+  current-version: "0.0.1-SNAPSHOT"
+  next-version: "0.1.0-SNAPSHOT"
+
+integration:
+  uses-reusable-workflows: true
+  pr-based-releases: false
+  java-version: "17"

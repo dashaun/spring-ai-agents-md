@@ -28,7 +28,7 @@ Then launch the test application:
 
 ```shell
 ./mvnw -f examples/spring-ai-agents-md-example/pom.xml spring-boot:test-run \
-  -Dspring-boot.run.main-class=io.github.springaicommunity.agentsmd.example.TestAgentsMdExampleApplication
+  -Dspring-boot.run.main-class=org.springaicommunity.agentsmd.example.TestAgentsMdExampleApplication
 ```
 
 Send a request:

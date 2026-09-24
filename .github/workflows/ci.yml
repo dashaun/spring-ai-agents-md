@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-matrix:
     name: build (boot ${{ matrix.boot }}, spring-ai ${{ matrix.spring-ai }})
     strategy:
       fail-fast: false
@@ -31,3 +31,9 @@ jobs:
         clean verify -Pwiremock-integration
         -Dspring-boot.version=${{ matrix.boot }}
         -Dspring-ai.version=${{ matrix.spring-ai }}
+
+  build:
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All Spring Boot / Spring AI matrix checks passed"

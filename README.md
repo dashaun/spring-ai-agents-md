@@ -73,6 +73,22 @@ when the active target changes, even when other advisors append to the system me
 
 Spring Boot 3.x is not a supported target for this project.
 
+### Version Compatibility
+
+The starter does not force a specific Spring Boot or Spring AI version onto your
+application. The published artifacts carry no pinned `dependencyManagement`, and the
+framework dependencies are declared `optional`, so the versions your application
+already manages win. The build itself uses the lowest supported versions by default and
+verifies the supported range on CI:
+
+| Property | Default | Override |
+| :--- | :--- | :--- |
+| `spring-boot.version` | `4.1.0` | `./mvnw clean test -Dspring-boot.version=4.1.1` |
+| `spring-ai.version` | `2.0.0` | `./mvnw clean test -Dspring-ai.version=2.0.1` |
+
+The continuous integration matrix builds and tests every supported combination of
+Spring Boot and Spring AI before a change is merged.
+
 ## Getting Started
 
 ### Build the Snapshot Locally
@@ -90,7 +106,7 @@ cd spring-ai-agents-md
 
 ```xml
 <dependency>
-    <groupId>io.github.spring-ai-community</groupId>
+    <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-starter-agents-md</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 </dependency>
